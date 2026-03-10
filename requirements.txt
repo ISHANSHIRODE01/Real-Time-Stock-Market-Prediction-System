@@ -1,0 +1,14 @@
+yfinance
+pandas
+numpy
+prophet
+torch
+scikit-learn
+fastapi
+uvicorn
+plotly
+pydantic
+requests
+python-dotenv
+pytest
+streamlit
