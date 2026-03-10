@@ -18,10 +18,10 @@
 
 <br/>
 
-<img src="https://img.shields.io/github/stars/yourusername/real-time-stock-prediction?style=social" />
-<img src="https://img.shields.io/github/forks/yourusername/real-time-stock-prediction?style=social" />
-<img src="https://img.shields.io/github/issues/yourusername/real-time-stock-prediction" />
-<img src="https://img.shields.io/github/last-commit/yourusername/real-time-stock-prediction" />
+<img src="https://img.shields.io/github/stars/ISHANSHIRODE01/Real-Time-Stock-Market-Prediction-System?style=social" />
+<img src="https://img.shields.io/github/forks/ISHANSHIRODE01/Real-Time-Stock-Market-Prediction-System?style=social" />
+<img src="https://img.shields.io/github/issues/ISHANSHIRODE01/Real-Time-Stock-Market-Prediction-System" />
+<img src="https://img.shields.io/github/last-commit/ISHANSHIRODE01/Real-Time-Stock-Market-Prediction-System" />
 
 </div>
 
@@ -461,8 +461,8 @@ real-time-stock-prediction/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/real-time-stock-prediction.git
-cd real-time-stock-prediction
+git clone https://github.com/ISHANSHIRODE01/Real-Time-Stock-Market-Prediction-System.git
+cd Real-Time-Stock-Market-Prediction-System
 ```
 
 ### 2. Create a Virtual Environment
@@ -631,7 +631,7 @@ copies of the Software...
 
 *If this project adds value, please ⭐ star the repo and share it with the community.*
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://linkedin.com/in/yourprofile)
-[![Portfolio](https://img.shields.io/badge/Portfolio-Visit-green?style=flat&logo=netlify)](https://yourportfolio.com)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/ishan-shirode-556534375/)
+[![Github](https://img.shields.io/badge/Github-Visit-green?style=flat&logo=netlify)](https://github.com/ISHANSHIRODE01)
 
 </div>
