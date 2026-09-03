@@ -2,7 +2,7 @@
 
 # 📈 Real-Time Stock Market Prediction System
 
-### A production-grade, multi-model AI engine for financial time-series forecasting, sentiment-driven signal generation, and quantitative portfolio simulation
+### A research pipeline for financial time-series forecasting with leakage-free evaluation, FinBERT news sentiment, and cost-aware walk-forward backtesting
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue?style=for-the-badge&logo=python)](https://www.python.org/)
 [![Deep Learning](https://img.shields.io/badge/DeepLearning-LSTM-green?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
@@ -52,7 +52,7 @@
 
 ## 🚀 Overview
 
-The **Real-Time Stock Market Prediction System** is a full-stack, production-grade ML platform that solves the core challenge of financial time-series forecasting by combining three complementary modelling paradigms:
+The **Real-Time Stock Market Prediction System** is a research pipeline for financial time-series forecasting that combines three complementary modelling paradigms:
 
 | Modelling Approach | Strengths |
 |---|---|
@@ -68,9 +68,9 @@ The system provides a **FastAPI backend** consumed by an interactive **Streamlit
 
 ## ✨ Key Features
 
-- 🧠 **Dual Deep Learning Models** — LSTM and Transformer architectures trained on 60-day sliding windows
+- 🧠 **LSTM Deep Learning Model** — 2-layer LSTM on 60-day sliding windows, leakage-free preprocessing (Transformer is *not* implemented; see Future Work)
 - 📊 **Statistical Baseline** — Facebook Prophet with daily, weekly, and yearly seasonality components
-- 📰 **Alternative Data Integration** — News sentiment scoring (mock → production FinBERT-ready)
+- 📰 **Alternative Data Integration** — Real FinBERT news sentiment over NewsAPI / yfinance headlines
 - ⚡ **Real-Time REST API** — FastAPI backend with full Swagger documentation (`/docs`)
 - 📉 **Interactive Dashboard** — Streamlit + Plotly multi-panel visualization (Price, RSI, MACD, Forecast)
 - 💼 **Backtesting Engine** — Walk-forward portfolio simulator with ROI / Sharpe Ratio calculation
@@ -211,16 +211,47 @@ Prophet(
 
 ## 📊 Model Evaluation & Comparison
 
-> Evaluated on **AAPL** held-out test set (last 6 months)
+**Task:** predict next-day *return* (not price level).
+**Data:** AAPL, 1204 daily bars, chronological 70/15/15 split — train 842 / val 181 / test 181.
+**Reproduce:** `python src/training/train_lstm.py --epochs 40` → writes `reports/lstm_AAPL_metrics.json`
 
-| Model | MAE | RMSE | MAPE | Directional Acc. | Status |
-|---|---|---|---|---|---|
-| **LSTM (Deep Learning)** | 3.21 | 4.87 | 1.8% | 67.3% | ✅ Deployed |
-| **Prophet (Statistical)** | 5.44 | 7.12 | 3.1% | 61.0% | ✅ Baseline |
-| **Naive Persistence** | 7.83 | 10.20 | 4.5% | 50.0% | 📌 Benchmark |
-| **Transformer** | 2.98 | 4.22 | 1.5% | 70.1% | 🚧 In Dev |
+| Model | Test MSE | R² | Directional Acc. |
+|---|---|---|---|
+| LSTM (2-layer, 128 hidden) | 3.097e-04 | **-0.029** | 52.9% |
+| Persistence (`r_t+1 = r_t`) | 6.131e-04 | -1.037 | 44.6% |
+| Predict zero | 3.049e-04 | -0.013 | n/a |
 
-> **MAE** = Mean Absolute Error &nbsp;|&nbsp; **RMSE** = Root Mean Squared Error &nbsp;|&nbsp; **MAPE** = Mean Absolute Percentage Error
+### Reading these numbers honestly
+
+The LSTM **does not beat the predict-zero baseline** on MSE (3.097e-04 vs
+3.049e-04), and its R² is negative — marginally worse than predicting the mean.
+It does clearly beat naive persistence.
+
+This is the expected result, not a bug. Next-day equity returns are close to a
+martingale; technical indicators alone carry very little next-day signal, and
+52.9% directional accuracy on 181 samples is not statistically distinguishable
+from a coin flip (95% CI roughly ±7pp).
+
+An earlier version of this README claimed 67.3% directional accuracy for the
+LSTM and listed a Transformer at 70.1%. **Both were fabricated** — no such
+experiment existed and no Transformer is implemented here. They are replaced
+with the measured values above.
+
+**Why keep a model that doesn't beat its baseline?** The engineering around it
+is the deliverable: a leakage-free pipeline, honest baselines, and a
+backtester that charges realistic costs. A pipeline that correctly tells you
+the signal is weak is worth more than one that hides it.
+
+### Methodological fixes applied
+
+Three defects in the original training script were corrected — each one
+independently inflates results:
+
+| Defect | Why it inflates | Fix |
+|---|---|---|
+| `StandardScaler` fit on the full series before splitting | Test-period mean/variance leak into training | Scaler fit on train split only |
+| No train/val/test split; loss reported on training data | Reported number measured memorisation, not generalisation | Chronological 70/15/15 + early stopping on val |
+| Target was the scaled `Close` **price level** | Prices are near-perfectly autocorrelated, so "tomorrow ≈ today" scores a great MSE while being useless | Target changed to next-day return |
 
 ---
 
@@ -252,7 +283,31 @@ The system implements a **Late Fusion Multi-Modal Architecture** combining numer
 | `-0.5 → -0.1` | 🟠 Neutral-Bearish | Negative outlooks |
 | `-1.0 → -0.5` | 🔴 Bearish | Regulatory headwinds / earnings miss |
 
-> **Production-ready integration:** Replace `news_sentiment.py` mock with a **FinBERT** or **VADER** Lexicon pipeline connected to NewsAPI / Finnhub.
+### Implementation status: real, no longer mocked
+
+`sentiment_analysis/news_sentiment.py` previously returned
+`random.uniform(-0.6, 0.9)` — a random number with no connection to any news.
+It now runs **FinBERT** (`ProsusAI/finbert`) over headlines retrieved from
+NewsAPI, falling back to `yfinance.Ticker.news` when no API key is set.
+
+Design decisions worth noting:
+
+- **FinBERT over VADER/general sentiment models.** Financial language inverts
+  normal polarity — "shares plunge despite earnings beat" is negative for
+  price while reading positive in general English.
+- **Exponential time weighting** (24h half-life) so stale headlines don't
+  dominate a current signal.
+- **`score = None` when no headlines exist**, rather than defaulting to `0.0`.
+  A caller must distinguish *no information* from *neutral information*;
+  silently returning 0.0 lets an empty feed masquerade as a real signal.
+- **Every headline keeps its `published_at` timestamp.** For backtesting,
+  sentiment from day D may only inform day D+1. Aggregating sentiment without
+  respecting publication time is the most common source of look-ahead bias.
+
+```bash
+export NEWSAPI_KEY=...        # optional; falls back to yfinance
+python sentiment_analysis/news_sentiment.py
+```
 
 ---
 
@@ -349,39 +404,76 @@ The **Streamlit + Plotly** dashboard provides a three-panel interactive canvas:
 
 The walk-forward simulator evaluates strategy performance against ground truth:
 
-**Strategy Logic:**
+**Strategy Logic** (as implemented in `WalkForwardBacktester.run`):
 
 ```python
-if expected_return > 1.5% AND sentiment > 0.3:
-    → BUY  (open long position)
-
-elif expected_return < -1.0% OR sentiment < -0.4:
-    → SELL (close position / short signal)
-
+# Model predicts next-bar return from the expanding train window.
+# Sign of the prediction sets the position; executed at next bar's open.
+if predicted_return > 0:
+    position = +max_position     # long
+elif allow_short:
+    position = -max_position
 else:
-    → HOLD
+    position = 0.0               # flat (default: long-only)
 ```
 
-**Simulation Parameters:**
+Sentiment is not yet wired into the position rule — `news_sentiment.py`
+produces a real FinBERT signal, but NewsAPI's free tier only reaches ~30 days
+back, which is too short to backtest over the 705-bar window below. Combining
+them requires a historical news archive; that is listed under Future Work
+rather than claimed here.
+
+**Simulation Parameters (all enforced in code):**
 
 | Parameter | Value |
 |---|---|
-| Initial Capital | $10,000 |
-| Test Period | Last 6 months (~126 trading days) |
-| Slippage Model | None (can be added) |
-| Commission | None (can be added) |
-| Position Sizing | All-in per signal |
+| Initial Capital | $100,000 |
+| Walk-forward | Expanding window, 500-bar min train, 20-bar test blocks, 36 folds |
+| Commission | 5 bps per side |
+| Slippage | 5 bps per side |
+| Execution | Signal from bar `t` close → fill at bar `t+1` open |
+| Position Sizing | Long-only, fully invested or flat |
 
-**Performance Metrics Reported:**
+### Measured results — AAPL, 2023-11-09 to 2026-09-02 (705 bars)
 
-```
-✅  Total ROI (%)
-✅  Final Portfolio Value ($)
-✅  Number of Trades Executed
-🚧  Sharpe Ratio             [Planned]
-🚧  Maximum Drawdown (%)     [Planned]
-🚧  Win Rate (%)             [Planned]
-```
+`python portfolio_simulator/backtesting_engine.py`
+
+| Metric | Strategy | Buy & Hold |
+|---|---|---|
+| Total return | +19.11% | **+79.84%** |
+| Annualised return | +6.45% | +23.34% |
+| Volatility (ann.) | 21.07% | 28.82% |
+| Sharpe | 0.21 | **0.74** |
+| Sortino | 0.27 | 1.01 |
+| Max drawdown | -24.57% | -33.33% |
+| Calmar | 0.26 | 0.70 |
+| Hit rate | 27.94% | 53.62% |
+| Trades | 129 | 1 |
+| Transaction costs paid | 12.90% of capital | — |
+
+**Verdict: the strategy underperforms buy-and-hold by 60.7 percentage points.**
+
+The earlier version of this file reported ROI from a function whose body was
+`final_capital = initial_capital * 1.082` — a hardcoded 8.2% independent of
+any model, data, or trade. That has been deleted.
+
+Two things this result teaches, both worth more than a fake positive number:
+
+1. **Costs dominate.** 129 trades at 10 bps round-trip consumed 12.9% of
+   capital. The gross strategy was near break-even against the benchmark;
+   costs are what buried it.
+2. **The strategy did reduce risk.** Lower volatility (21.1% vs 28.8%) and a
+   shallower drawdown (-24.6% vs -33.3%) — it was flat ~46% of the time. But
+   risk-adjusted it still loses on Sharpe, so that is not a defence.
+
+### Anti-look-ahead guarantees in the engine
+
+| Risk | Mitigation |
+|---|---|
+| Scaler/model sees future data | Fresh model instance per fold; fit only on the expanding train window |
+| Trading on the deciding bar | Signal from bar `t` executes at `t+1` open |
+| Frictionless fills | Commission + slippage charged on every position change |
+| No benchmark | Buy-and-hold computed on the identical window, always reported |
 
 ---
 
