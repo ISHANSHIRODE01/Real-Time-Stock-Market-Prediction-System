@@ -3,6 +3,8 @@ pandas
 numpy
 prophet
 torch
+transformers
+joblib
 scikit-learn
 fastapi
 uvicorn
